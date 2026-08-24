@@ -55,10 +55,13 @@ if (argv.includes('--help') || argv.includes('-h')) {
 const topLevel = spawnSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
 })
-const repoRoot =
-  topLevel.status === 0 && topLevel.stdout.trim()
-    ? topLevel.stdout.trim()
-    : process.cwd()
+if (topLevel.status !== 0 || !topLevel.stdout.trim()) {
+  console.error(
+    `Error: not a git repository (${process.cwd()}). Codex reviews a diff, so run this from inside a repo.`,
+  )
+  process.exit(1)
+}
+const repoRoot = topLevel.stdout.trim()
 
 const flag = name => {
   const i = argv.indexOf(name)
