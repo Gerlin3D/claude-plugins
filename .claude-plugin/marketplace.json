@@ -1,0 +1,11 @@
+{
+  "name": "gerlin-plugins",
+  "owner": { "name": "Gerlin3D" },
+  "plugins": [
+    {
+      "name": "codex",
+      "source": "./codex",
+      "description": "Second-opinion code review of local changes via the OpenAI Codex CLI"
+    }
+  ]
+}
