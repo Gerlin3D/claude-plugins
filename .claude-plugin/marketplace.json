@@ -14,5 +14,6 @@
       "source": "./pipeline",
       "description": "Plan-to-implementation agent pipeline: discovery, design, and coding split across models"
     }
-  ]
+  ],
+  "description": "Personal Claude Code tooling: Codex-based code review and a plan-to-implementation agent pipeline"
 }
