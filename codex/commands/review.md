@@ -1,6 +1,6 @@
 ---
 description: Второе мнение по локальным изменениям через Codex CLI (codex review)
-argument-hint: '[uncommitted | base <branch> | commit <sha> | <фокус ревью>]'
+argument-hint: '[uncommitted | base <branch> | commit <sha> | --model <name> | <фокус ревью>]'
 allowed-tools: Bash(node:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Read, Grep, Glob
 ---
 
@@ -16,11 +16,16 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-review.mjs" $ARGUMENTS
 
 Аргументы передавай как есть — обёртка сама разбирает `uncommitted`, `base <branch>`, `commit <sha>`, голый sha/имя ветки и любой свободный текст (он становится фокусом ревью). Без аргументов: dirty tree → `--uncommitted`, чистое дерево → базовая ветка (`CODEX_REVIEW_BASE`, иначе первая существующая из `dev` / `main` / `master`).
 
+По умолчанию обёртка закрепляет `gpt-5.6-sol` с reasoning effort `high`. Разовый запуск можно переопределить через `--model` и `--reasoning-effort`.
+
 Ревью идёт минуты, поэтому запускай **в фоне** (`run_in_background: true`) и продолжай работу — уведомление о завершении придёт само. Если пользователь просил результат здесь и сейчас, запускай в foreground с таймаутом 600000 мс.
 
 Один запуск на задачу: повторно «на всякий случай» и параллельно несколько ревью не запускать.
 
-Обёртка находит `codex` в PATH, а на Windows — десктопную установку в `%LOCALAPPDATA%\OpenAI\Codex\bin\<hash>\` (переопределяется через `CODEX_BIN`). Критерии ревью Codex берёт сам из `AGENTS.md` проекта и `~/.codex/AGENTS.md` — правила правь там, не в этой команде.
+Обёртка сначала использует `CODEX_BIN` или `codex` из PATH. На Windows затем выбирается самая
+свежая сборка из установленного VS Code Codex extension, и только после неё — Desktop-сборка из
+`%LOCALAPPDATA%\OpenAI\Codex\bin\<hash>\`. Критерии ревью Codex берёт сам из `AGENTS.md`
+проекта и `~/.codex/AGENTS.md` — правила правь там, не в этой команде.
 
 Если обёртка сообщила, что Codex CLI не найден — не изобретай обходной путь: скажи, что нужно установить Codex или задать `CODEX_BIN`.
 

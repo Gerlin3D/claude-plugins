@@ -1,7 +1,10 @@
 # codex (Claude Code plugin)
 
-Adds `/codex:review` — a second-opinion code review of local changes, run by the
-OpenAI Codex CLI and triaged by Claude Code.
+Adds two commands run by the OpenAI Codex CLI and triaged by Claude Code:
+
+- `/codex:review` — second-opinion code review of local changes.
+- `/codex:plan-review [focus]` — independent architecture review of Claude's
+  current implementation plan before coding starts.
 
 ## Install
 
@@ -20,7 +23,14 @@ local clone path.
 /codex:review base dev
 /codex:review commit <sha>         # bare sha or branch name also works
 /codex:review проверь idempotency  # free text becomes a per-run focus
+/codex:plan-review
+/codex:plan-review focus on queue idempotency
 ```
+
+Both commands default to `gpt-5.6-sol`, independently of the model selected in another Codex
+session. `/codex:review` uses reasoning effort `high`; `/codex:plan-review` uses `medium` and a
+targeted repository scope capped at 30 files. Use `--model` or `--reasoning-effort` for a one-off
+override.
 
 ## Requirements
 
@@ -41,3 +51,10 @@ one exception and travels as a prompt.
 
 - `CODEX_BIN` — explicit path to the codex executable
 - `CODEX_REVIEW_BASE` — default base branch for a clean tree (else dev/main/master)
+- `CODEX_REVIEW_MODEL` — code review model and fallback plan-review model (default: `gpt-5.6-sol`)
+- `CODEX_REVIEW_REASONING_EFFORT` — code review reasoning effort (default: `high`)
+- `CODEX_PLAN_REVIEW_MODEL` — plan-review model (default: `CODEX_REVIEW_MODEL` or `gpt-5.6-sol`)
+- `CODEX_PLAN_REVIEW_REASONING_EFFORT` — plan-review reasoning effort (default: `medium`)
+
+On Windows, the wrappers resolve `CODEX_BIN`, then PATH, then the newest installed VS Code Codex
+extension CLI, and finally the Codex Desktop bundled CLI.

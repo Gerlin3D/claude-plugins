@@ -26,6 +26,8 @@ Target (pick one, default = auto):
 
 Options:
   --model <name>         override the Codex model
+  --reasoning-effort <level>
+                         override reasoning effort (minimal/low/medium/high/xhigh)
   --title <text>         title shown in the review summary
   --focus "<text>"       per-run focus; any other free text is treated as focus
   --print-prompt         print what would be sent and exit
@@ -39,6 +41,9 @@ because "codex review" refuses a prompt together with --uncommitted / --base /
 Environment:
   CODEX_BIN              explicit path to the codex executable
   CODEX_REVIEW_BASE      default base branch used for a clean tree
+  CODEX_REVIEW_MODEL     review model (default: gpt-5.6-sol)
+  CODEX_REVIEW_REASONING_EFFORT
+                         review reasoning effort (default: high)
 `
 
 // ── args ──────────────────────────────────────────────────────────────────────
@@ -74,7 +79,18 @@ const flag = name => {
   return value
 }
 
-const model = flag('--model')
+const model = flag('--model') ?? process.env.CODEX_REVIEW_MODEL ?? 'gpt-5.6-sol'
+const reasoningEffort =
+  flag('--reasoning-effort') ??
+  process.env.CODEX_REVIEW_REASONING_EFFORT ??
+  'high'
+const reasoningEfforts = new Set(['minimal', 'low', 'medium', 'high', 'xhigh'])
+if (!reasoningEfforts.has(reasoningEffort)) {
+  console.error(
+    `Error: --reasoning-effort must be one of: ${[...reasoningEfforts].join(', ')}`,
+  )
+  process.exit(1)
+}
 const title = flag('--title')
 const printPromptOnly = argv.includes('--print-prompt')
 
@@ -92,7 +108,16 @@ const positional = []
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i]
   if (arg.startsWith('--')) {
-    if (['--base', '--commit', '--model', '--title', '--focus'].includes(arg)) {
+    if (
+      [
+        '--base',
+        '--commit',
+        '--model',
+        '--reasoning-effort',
+        '--title',
+        '--focus',
+      ].includes(arg)
+    ) {
       i += 1
     }
     continue
@@ -181,6 +206,33 @@ const resolveCodex = () => {
   if (onPath) return onPath
 
   const home = os.homedir()
+  if (isWindows) {
+    const extensionsDir = path.join(home, '.vscode', 'extensions')
+    const platformDir =
+      process.arch === 'arm64' ? 'windows-arm64' : 'windows-x86_64'
+    if (existsSync(extensionsDir)) {
+      const vscodeCandidates = readdirSync(extensionsDir, {
+        withFileTypes: true,
+      })
+        .filter(
+          entry =>
+            entry.isDirectory() && entry.name.startsWith('openai.chatgpt-'),
+        )
+        .map(entry =>
+          path.join(
+            extensionsDir,
+            entry.name,
+            'bin',
+            platformDir,
+            exeName,
+          ),
+        )
+        .filter(candidate => existsSync(candidate))
+        .map(candidate => ({ candidate, mtime: statSync(candidate).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime)
+      if (vscodeCandidates[0]) return vscodeCandidates[0].candidate
+    }
+  }
   const localAppData =
     process.env.LOCALAPPDATA ?? path.join(home, 'AppData', 'Local')
   // The Codex desktop app installs into a version-hashed directory that is not
@@ -266,7 +318,12 @@ const focusPrompt = focus
 
 // ── run ───────────────────────────────────────────────────────────────────────
 
-const configArgs = model ? ['-c', `model=${JSON.stringify(model)}`] : []
+const configArgs = [
+  '-c',
+  `model=${JSON.stringify(model)}`,
+  '-c',
+  `model_reasoning_effort=${JSON.stringify(reasoningEffort)}`,
+]
 const titleArgs = title ? ['--title', title] : []
 const codexArgs = focusPrompt
   ? ['review', ...configArgs, ...titleArgs, focusPrompt]
@@ -274,11 +331,13 @@ const codexArgs = focusPrompt
 
 const branch =
   git(['rev-parse', '--abbrev-ref', 'HEAD']).stdout?.trim() || 'unknown'
+const codexBin = resolveCodex()
 
 if (printPromptOnly) {
   console.log(
     `codex ${codexArgs.slice(0, focusPrompt ? -1 : undefined).join(' ')}  (repo: ${repoRoot}, branch: ${branch})`,
   )
+  console.log(`codex: ${codexBin}`)
   console.log(
     focusPrompt
       ? `\nprompt:\n${focusPrompt}`
@@ -287,7 +346,6 @@ if (printPromptOnly) {
   process.exit(0)
 }
 
-const codexBin = resolveCodex()
 console.log(
   `codex review${focusPrompt ? ` (focused, scope: ${target.scope})` : ` ${target.flags.join(' ')}`}  (repo: ${repoRoot}, branch: ${branch})`,
 )

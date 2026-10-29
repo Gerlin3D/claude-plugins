@@ -1,6 +1,6 @@
 {
   "name": "codex",
   "description": "Second-opinion code review of local changes via the OpenAI Codex CLI",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "author": { "name": "Gerlin3D" }
 }
