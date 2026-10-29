@@ -1,6 +1,6 @@
 {
   "name": "pipeline",
-  "description": "Plan-to-implementation agent pipeline: discovery, design, and coding split across models",
-  "version": "0.1.0",
+  "description": "Plan → implement → review → fix agent pipeline, each stage on the model that fits its job",
+  "version": "0.2.0",
   "author": { "name": "Gerlin3D" }
 }
