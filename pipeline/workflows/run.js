@@ -57,8 +57,9 @@ const BRIEF_META_SCHEMA = {
       },
     },
     openNonBlocking: { type: 'array', items: { type: 'string' } },
+    acceptedRisks: { type: 'array', items: { type: 'string' }, description: 'Everything the brief tolerates, defers, or declares out of scope although it is a real risk or defect: one entry per item, verbatim from the brief.' },
   },
-  required: ['complete', 'filesToChange', 'verificationCommands', 'blockingDecisions', 'openNonBlocking'],
+  required: ['complete', 'filesToChange', 'verificationCommands', 'blockingDecisions', 'openNonBlocking', 'acceptedRisks'],
 }
 
 const IMPL_SCHEMA = {
@@ -90,6 +91,7 @@ const REVIEW_SCHEMA = {
         type: 'object',
         properties: {
           id: { type: 'string' },
+          lens: { type: 'string', enum: ['brief', 'production'], description: 'brief = deviates from the brief; production = breaks in production regardless of the brief' },
           file: { type: 'string' },
           line: { type: 'integer' },
           severity: { type: 'string', enum: ['blocker', 'major', 'minor'] },
@@ -97,7 +99,7 @@ const REVIEW_SCHEMA = {
           evidence: { type: 'string' },
           suggestedFix: { type: 'string' },
         },
-        required: ['id', 'file', 'line', 'severity', 'summary', 'evidence', 'suggestedFix'],
+        required: ['id', 'lens', 'file', 'line', 'severity', 'summary', 'evidence', 'suggestedFix'],
       },
     },
     briefCompliance: { type: 'array', items: { type: 'string' }, description: 'Brief steps or acceptance criteria that are NOT met, one per entry; empty when all met.' },
@@ -129,7 +131,7 @@ const CHECKS_SCHEMA = {
 // ---------- helpers ----------
 
 const json = (v) => JSON.stringify(v, null, 2)
-const fmtFinding = (f) => `[${f.id}] ${f.severity} — ${f.file}:${f.line}\n  ${f.summary}\n  Evidence: ${f.evidence}\n  Suggested fix: ${f.suggestedFix}`
+const fmtFinding = (f) => `[${f.id}] ${f.severity} (${f.lens || 'production'}) — ${f.file}:${f.line}\n  ${f.summary}\n  Evidence: ${f.evidence}\n  Suggested fix: ${f.suggestedFix}`
 
 // Every stage runs through this so one failing agent produces a typed `error` result
 // naming the stage, instead of an exception that kills the whole run (and any batch around it).
@@ -169,7 +171,7 @@ const briefTextRes = await stage('design', () => agent(
       : 'No decisions have been pre-approved by the user. List every blocking decision explicitly.',
     [
       'Write the implementation brief as markdown. Your final message IS the brief; it is parsed by a formatter afterwards, so use these exact section headings:',
-      '`## Goal`, `## Non-goals`, `## Files to change` (one path per line), `## Changes` (file by file), `## Contracts and invariants`, `## Steps`, `## Acceptance criteria`, `## Verification commands` (one exact command per line, taken from the project docs), `## Blocking decisions` (each: `- [id] question — options: a | b — recommendation: …`, or `none`), `## Open non-blocking points`.',
+      '`## Goal`, `## Non-goals`, `## Files to change` (one path per line), `## Changes` (file by file), `## Contracts and invariants`, `## Steps`, `## Acceptance criteria`, `## Verification commands` (one exact command per line, taken from the project docs), `## Blocking decisions` (each: `- [id] question — options: a | b — recommendation: …`, or `none`), `## Open non-blocking points`, `## Accepted risks` (everything you tolerate, defer, or leave out of scope although it is a real defect or risk — one line each, or `none`; these go to the user as a list, so never bury them in the prose).',
       'If you are running out of turns, stop investigating and write the brief from what you have verified, marking unverified parts as such.',
     ].join('\n'),
   ].join('\n\n'),
@@ -202,6 +204,7 @@ if (brief.blockingDecisions.length > 0) {
     blockingDecisions: brief.blockingDecisions,
     brief: brief.brief,
     openNonBlocking: brief.openNonBlocking,
+    acceptedRisks: brief.acceptedRisks,
     map,
   }
 }
@@ -346,6 +349,7 @@ return {
   reviewRounds: rounds,
   unresolved,
   minorFindings: minors,
+  acceptedRisks: brief.acceptedRisks,
   checks: checks ? checks.checks : [],
   checksNotRun: brief.verificationCommands.length === 0 ? 'brief listed no verification commands' : (checks ? '' : 'check-runner returned nothing'),
 }

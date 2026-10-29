@@ -48,6 +48,23 @@ Policy inside the batch (no questions mid-run):
 Without `--commit` every later step's reviewer sees the cumulative diff of the
 earlier steps; prefer `--commit` for series longer than two steps.
 
+After the last step the batch runs a **final review of the whole series** with no
+briefs at all: the reviewer sees the combined diff (from `baseRef`, the commit the
+command recorded before starting) and the project rules, and additionally hunts
+for cross-step problems — duplicated helpers, a step undoing another, dead code.
+Its findings are reported, not fixed. Disable with `finalReview: false` in args.
+
+### Two review lenses and accepted risks
+
+Every finding carries a `lens`: `brief` (the change deviates from the brief) or
+`production` (it breaks in production whether or not the brief asked for it).
+The reviewer answers the production question first, as if the brief did not exist.
+
+The architect must list everything it tolerates, defers, or leaves out of scope
+under `## Accepted risks`; the pipeline returns that list as `acceptedRisks`
+(per step in a batch) so the user decides about them instead of discovering
+them in the brief's prose.
+
 ## Stages
 
 | # | Stage | Agent | Model | Effort | What it does |

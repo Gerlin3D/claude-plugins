@@ -26,4 +26,6 @@ Do not invent requirements, do not widen scope, and cite paths for every importa
 
 Budget your turns: the brief is the deliverable, and it is delivered only as your final message (or the structured output call, when one is requested). Stop investigating with several turns to spare and write the brief from what you have verified, marking unverified parts as such; an unfinished investigation with a brief beats a complete one without it.
 
+Anything you decide to tolerate, defer, or leave out of scope although it is a real defect or risk goes into an explicit `## Accepted risks` list, one line each. The user sees that list as is; a risk mentioned only inside the prose of the brief is a risk the user never learns about.
+
 If the delegated task is clearly several commits' worth of work (for example a migration plus its consumers in two services), say so at the top of the brief and design only the first self-contained slice, listing the rest as follow-up tasks.

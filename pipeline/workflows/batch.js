@@ -1,8 +1,11 @@
 export const meta = {
   name: 'batch',
   description: 'Run a series of steps, each through the full pipeline:run (plan → implement → review → fix → checks), one after another',
-  whenToUse: 'Started by /pipeline:batch. args: { steps: [{ title, task, decisions? }], commit?: boolean, stopOnFailure?: boolean, stopOnBlocked?: boolean, runScriptPath?: string }',
-  phases: [{ title: 'Steps', detail: 'one pipeline:run per step, sequential' }],
+  whenToUse: 'Started by /pipeline:batch. args: { steps: [{ title, task, decisions? }], commit?: boolean, stopOnFailure?: boolean, stopOnBlocked?: boolean, finalReview?: boolean, baseRef?: string, runScriptPath?: string }',
+  phases: [
+    { title: 'Steps', detail: 'one pipeline:run per step, sequential' },
+    { title: 'Final review', detail: 'whole-branch review without a brief: diff + project rules', model: 'opus' },
+  ],
 }
 
 // ---------- input ----------
@@ -17,6 +20,35 @@ const commit = input.commit === true
 const stopOnFailure = input.stopOnFailure !== false
 const stopOnBlocked = input.stopOnBlocked === true
 const runScriptPath = input.runScriptPath ? String(input.runScriptPath) : ''
+const finalReview = input.finalReview !== false
+// Commit the series started from; lets the final review diff the whole branch. The command passes `git rev-parse HEAD` taken before the run.
+const baseRef = input.baseRef ? String(input.baseRef).trim() : ''
+
+const FINAL_REVIEW_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['approve', 'changes_requested'] },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          lens: { type: 'string', enum: ['brief', 'production'] },
+          file: { type: 'string' },
+          line: { type: 'integer' },
+          severity: { type: 'string', enum: ['blocker', 'major', 'minor'] },
+          summary: { type: 'string' },
+          evidence: { type: 'string' },
+          suggestedFix: { type: 'string' },
+        },
+        required: ['id', 'lens', 'file', 'line', 'severity', 'summary', 'evidence', 'suggestedFix'],
+      },
+    },
+    crossStepIssues: { type: 'array', items: { type: 'string' }, description: 'Problems visible only across steps: duplicated helpers, contradictory conventions, a later step undoing an earlier one, leftover dead code.' },
+  },
+  required: ['verdict', 'findings', 'crossStepIssues'],
+}
 
 const COMMIT_SCHEMA = {
   type: 'object',
@@ -126,13 +158,53 @@ for (let i = 0; i < steps.length; i++) {
 const done = results.filter((r) => r.status === 'approved').length
 const blocked = results.filter((r) => r.status === 'blocked')
 const notRun = steps.slice(results.length).map((s, k) => ({ index: results.length + k + 1, title: s.title || `step ${results.length + k + 1}` }))
+const committedCount = results.filter((r) => r.committed).length
+const codeChanged = results.some((r) => r.result && r.result.filesTouched && r.result.filesTouched.length > 0)
+
+// Everything the architects tolerated or left out of scope, surfaced as one list instead of buried in the briefs.
+const acceptedRisks = []
+for (const r of results) {
+  const risks = r.result && Array.isArray(r.result.acceptedRisks) ? r.result.acceptedRisks : []
+  for (const risk of risks) acceptedRisks.push({ step: r.index, title: r.title, risk })
+}
+
+// ---------- final review of the whole branch ----------
+
+let finalReviewResult = null
+if (finalReview && codeChanged) {
+  phase('Final review')
+  log('Reviewing the whole series without the briefs')
+  const range = baseRef ? `${baseRef}..HEAD` : committedCount > 0 ? `HEAD~${committedCount}..HEAD` : ''
+  const scope = range
+    ? `The series produced the commits in the range \`${range}\` plus whatever is still uncommitted in the working tree. Review the combined change: \`git diff ${range.split('..')[0]}\` shows all of it at once (committed and uncommitted).`
+    : 'The series left all of its changes uncommitted in the working tree: `git diff HEAD` plus untracked files is the whole change.'
+  try {
+    finalReviewResult = await agent(
+      [
+        'Whole-branch review. You are given NO brief on purpose: judge the combined result of a series of changes only against the project\'s rules and production safety (lens: production for everything; use lens: brief only for a clear violation of a documented project rule).',
+        scope,
+        `The steps, for orientation only (not a specification):\n${results.map((r) => `- step ${r.index} [${r.status}]: ${r.title}`).join('\n')}`,
+        'Also look for what no per-step review could see: duplicated helpers across steps, one step undoing or contradicting another, inconsistent conventions, dead code left behind, missing tests for behavior that now spans several steps. Put those in `crossStepIssues`.',
+      ].join('\n\n'),
+      { agentType: 'pipeline:feature-reviewer', label: 'final review', phase: 'Final review', schema: FINAL_REVIEW_SCHEMA },
+    )
+    if (!finalReviewResult) log('Final review returned nothing')
+  } catch (e) {
+    finalReviewResult = { error: e && e.message ? e.message : String(e) }
+    log(`Final review failed: ${finalReviewResult.error}`)
+  }
+} else if (finalReview) {
+  log('No code changed; final review skipped')
+}
 
 return {
   status: stoppedAt > 0 ? 'stopped' : blocked.length > 0 ? 'completed_with_blocked' : 'completed',
-  summary: `${done}/${steps.length} approved, ${blocked.length} blocked, ${notRun.length} not run${stoppedAt > 0 ? `; stopped at step ${stoppedAt}: ${stopReason}` : ''}`,
+  summary: `${done}/${steps.length} approved, ${blocked.length} blocked, ${notRun.length} not run${stoppedAt > 0 ? `; stopped at step ${stoppedAt}: ${stopReason}` : ''}${finalReviewResult && finalReviewResult.findings ? `; final review: ${finalReviewResult.verdict}, ${finalReviewResult.findings.length} finding(s)` : ''}`,
   commitEachStep: commit,
   steps: results,
   blockedSteps: blocked.map((b) => ({ index: b.index, title: b.title, blockingDecisions: b.result.blockingDecisions, brief: b.result.brief })),
+  acceptedRisks,
+  finalReview: finalReviewResult,
   notRun,
   stoppedAt,
   stopReason,
